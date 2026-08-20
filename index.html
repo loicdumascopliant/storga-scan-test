@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test Scan QR</title>
+<style>
+  :root {
+    --bg: #111;
+    --panel: #1c1c1c;
+    --accent: #d9a441;
+    --text: #f2f2f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  header {
+    padding: 14px 16px;
+    font-size: 18px;
+    font-weight: 600;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  #camWrap {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    background: #000;
+    overflow: hidden;
+  }
+  video { width: 100%; height: 100%; object-fit: cover; }
+  #scanBox {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 70%; aspect-ratio: 1/1;
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--accent);
+    border-radius: 12px;
+  }
+  main {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  label { font-size: 13px; color: #aaa; }
+  #qrValue {
+    background: var(--panel);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 15px;
+    word-break: break-all;
+    min-height: 20px;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: var(--panel);
+    color: var(--text);
+  }
+  .btnRow { display: flex; gap: 10px; }
+  button {
+    flex: 1;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  #btnA { background: var(--accent); color: #111; }
+  #btnB { background: #333; color: var(--text); }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  #rescanBtn {
+    background: transparent;
+    border: 1px solid #444;
+    color: #ccc;
+  }
+  #log {
+    font-size: 13px;
+    color: #999;
+    background: var(--panel);
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 40px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  #status { font-size: 13px; color: #999; min-height: 18px; }
+  #status.ok { color: #6fbf73; }
+  #status.err { color: #b23b3b; }
+</style>
+</head>
+<body>
+
+<header>Test Scan QR (sans réseau)</header>
+
+<div id="camWrap">
+  <video id="video" playsinline muted autoplay></video>
+  <div id="scanBox"></div>
+</div>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<main>
+  <div>
+    <label>Code scanné</label>
+    <div id="qrValue">— aucun —</div>
+    <button id="rescanBtn" style="margin-top:8px; width:100%;">Re-scanner</button>
+  </div>
+
+  <div>
+    <label for="qty">Saisie libre</label>
+    <input type="text" id="qty" placeholder="Tape quelque chose...">
+  </div>
+
+  <div class="btnRow">
+    <button id="btnA" disabled>STOP</button>
+    <button id="btnB" disabled>PARTIAL</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div>
+    <label>Log</label>
+    <div id="log">—</div>
+  </div>
+</main>
+
+<script>
+// ============================================================
+// CONFIG — à adapter
+// ============================================================
+// URL du relais (tourne sur pavillon1 ou en test via Termux).
+// Le navigateur ne connaît plus ni le login ni le mot de passe Storga.
+const RELAY_URL = "http://192.168.0.111:5000/relay/action";
+
+// ============================================================
+// Éléments
+// ============================================================
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const qrValueEl = document.getElementById('qrValue');
+const statusEl = document.getElementById('status');
+const qtyInput = document.getElementById('qty');
+const rescanBtn = document.getElementById('rescanBtn');
+const logEl = document.getElementById('log');
+
+let currentCode = null;
+let stream = null;
+let scanning = true;
+let useBarcodeDetector = 'BarcodeDetector' in window;
+let detector = null;
+let jsQRLoaded = false;
+
+// ============================================================
+// Démarrage caméra
+// ============================================================
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" }
+    });
+    video.srcObject = stream;
+    await video.play();
+    scanning = true;
+    setStatus("Caméra active — visez le QR code", "");
+
+    if (useBarcodeDetector) {
+      detector = new BarcodeDetector({ formats: ['qr_code'] });
+      scanLoopNative();
+    } else {
+      await loadJsQR();
+      scanLoopFallback();
+    }
+  } catch (e) {
+    setStatus("Erreur caméra : " + e.message, "err");
+  }
+}
+
+function loadJsQR() {
+  if (jsQRLoaded) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+    s.onload = () => { jsQRLoaded = true; resolve(); };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// ============================================================
+// Boucle de scan — API native (Chrome Android)
+// ============================================================
+async function scanLoopNative() {
+  if (!scanning) return;
+  try {
+    const codes = await detector.detect(video);
+    if (codes.length > 0) {
+      onCodeDetected(codes[0].rawValue);
+      return;
+    }
+  } catch (e) {
+    // ignore, on continue la boucle
+  }
+  requestAnimationFrame(scanLoopNative);
+}
+
+// ============================================================
+// Boucle de scan — fallback jsQR
+// ============================================================
+function scanLoopFallback() {
+  if (!scanning) return;
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+    if (code) {
+      onCodeDetected(code.data);
+      return;
+    }
+  }
+  requestAnimationFrame(scanLoopFallback);
+}
+
+function onCodeDetected(value) {
+  currentCode = value;
+  qrValueEl.textContent = value;
+  scanning = false;
+  setStatus("Code lu ✔", "ok");
+  if (navigator.vibrate) navigator.vibrate(80);
+}
+
+rescanBtn.addEventListener('click', () => {
+  currentCode = null;
+  qrValueEl.textContent = "— aucun —";
+  setStatus("Caméra active — visez le QR code", "");
+  scanning = true;
+  if (useBarcodeDetector) scanLoopNative();
+  else scanLoopFallback();
+});
+
+// ============================================================
+// Boutons — appelle le relais (qui lui-même appelle Storga)
+// ============================================================
+async function logAction(action) {
+  const payload = {
+    code_qr: currentCode || "",
+    saisie: qtyInput.value || "",
+    action: action
+  };
+
+  logEl.textContent = "Envoi vers le relais :\n" + JSON.stringify(payload, null, 2);
+  setStatus("Envoi en cours...", "");
+  btnA.disabled = true;
+  btnB.disabled = true;
+
+  try {
+    const res = await fetch(RELAY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
+      setStatus("Bouton \"" + action + "\" déclenché ✔ (Storga HTTP " + data.status + ")", "ok");
+      logEl.textContent += "\n\nSuccès — Storga HTTP " + data.status;
+    } else {
+      setStatus("Échec — " + (data.error || ("HTTP " + res.status)), "err");
+      logEl.textContent += "\n\nÉchec : " + JSON.stringify(data);
+    }
+  } catch (e) {
+    setStatus("Erreur réseau vers le relais : " + e.message, "err");
+    logEl.textContent += "\n\nErreur réseau : " + e.message;
+  } finally {
+    updateButtonsState();
+  }
+}
+
+const btnA = document.getElementById('btnA');
+const btnB = document.getElementById('btnB');
+
+function updateButtonsState() {
+  const hasValue = qtyInput.value.trim().length > 0;
+  btnA.disabled = !hasValue;
+  btnB.disabled = !hasValue;
+}
+qtyInput.addEventListener('input', updateButtonsState);
+
+btnA.addEventListener('click', () => logAction('STOP'));
+btnB.addEventListener('click', () => logAction('PARTIAL'));
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg;
+  statusEl.className = cls || "";
+}
+
+// ============================================================
+// Init
+// ============================================================
+startCamera();
+</script>
+</body>
+</html>
