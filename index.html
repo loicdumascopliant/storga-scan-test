@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Test Scan QR</title>
+<title>QR Scan Test</title>
 <style>
   :root {
     --bg: #111;
@@ -107,7 +107,7 @@
 </head>
 <body>
 
-<header>Test Scan QR (sans réseau)</header>
+<header>QR Scan Test</header>
 
 <div id="camWrap">
   <video id="video" playsinline muted autoplay></video>
@@ -117,14 +117,14 @@
 
 <main>
   <div>
-    <label>Code scanné</label>
-    <div id="qrValue">— aucun —</div>
-    <button id="rescanBtn" style="margin-top:8px; width:100%;">Re-scanner</button>
+    <label>Scanned code</label>
+    <div id="qrValue">-- none --</div>
+    <button id="rescanBtn" style="margin-top:8px; width:100%;">Rescan</button>
   </div>
 
   <div>
-    <label for="qty">Saisie libre</label>
-    <input type="text" id="qty" placeholder="Tape quelque chose...">
+    <label for="valueInput">Value (integer)</label>
+    <input type="number" id="valueInput" inputmode="numeric" pattern="[0-9]*" step="1" min="0" placeholder="0">
   </div>
 
   <div class="btnRow">
@@ -136,29 +136,31 @@
 
   <div>
     <label>Log</label>
-    <div id="log">—</div>
+    <div id="log">--</div>
   </div>
 </main>
 
 <script>
 // ============================================================
-// CONFIG — à adapter
+// CONFIG
 // ============================================================
-// URL du relais (tourne sur pavillon1 ou en test via Termux).
-// Le navigateur ne connaît plus ni le login ni le mot de passe Storga.
+// Relay URL (runs on pavillon1). The browser never knows the Storga
+// login/password -- only the relay does.
 const RELAY_URL = "http://192.168.0.111:5000/relay/action";
 
 // ============================================================
-// Éléments
+// Elements
 // ============================================================
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const qrValueEl = document.getElementById('qrValue');
 const statusEl = document.getElementById('status');
-const qtyInput = document.getElementById('qty');
+const valueInput = document.getElementById('valueInput');
 const rescanBtn = document.getElementById('rescanBtn');
 const logEl = document.getElementById('log');
+const btnA = document.getElementById('btnA');
+const btnB = document.getElementById('btnB');
 
 let currentCode = null;
 let stream = null;
@@ -168,7 +170,7 @@ let detector = null;
 let jsQRLoaded = false;
 
 // ============================================================
-// Démarrage caméra
+// Camera startup
 // ============================================================
 async function startCamera() {
   try {
@@ -178,7 +180,7 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
     scanning = true;
-    setStatus("Caméra active — visez le QR code", "");
+    setStatus("Camera active -- point at the QR code", "");
 
     if (useBarcodeDetector) {
       detector = new BarcodeDetector({ formats: ['qr_code'] });
@@ -188,7 +190,7 @@ async function startCamera() {
       scanLoopFallback();
     }
   } catch (e) {
-    setStatus("Erreur caméra : " + e.message, "err");
+    setStatus("Camera error: " + e.message, "err");
   }
 }
 
@@ -204,7 +206,7 @@ function loadJsQR() {
 }
 
 // ============================================================
-// Boucle de scan — API native (Chrome Android)
+// Scan loop -- native API (Chrome Android)
 // ============================================================
 async function scanLoopNative() {
   if (!scanning) return;
@@ -215,13 +217,13 @@ async function scanLoopNative() {
       return;
     }
   } catch (e) {
-    // ignore, on continue la boucle
+    // ignore, keep looping
   }
   requestAnimationFrame(scanLoopNative);
 }
 
 // ============================================================
-// Boucle de scan — fallback jsQR
+// Scan loop -- jsQR fallback
 // ============================================================
 function scanLoopFallback() {
   if (!scanning) return;
@@ -243,31 +245,42 @@ function onCodeDetected(value) {
   currentCode = value;
   qrValueEl.textContent = value;
   scanning = false;
-  setStatus("Code lu ✔", "ok");
+  setStatus("Code read \u2714", "ok");
   if (navigator.vibrate) navigator.vibrate(80);
 }
 
 rescanBtn.addEventListener('click', () => {
   currentCode = null;
-  qrValueEl.textContent = "— aucun —";
-  setStatus("Caméra active — visez le QR code", "");
+  qrValueEl.textContent = "-- none --";
+  setStatus("Camera active -- point at the QR code", "");
   scanning = true;
   if (useBarcodeDetector) scanLoopNative();
   else scanLoopFallback();
 });
 
 // ============================================================
-// Boutons — appelle le relais (qui lui-même appelle Storga)
+// Value input -- enable/disable buttons
 // ============================================================
-async function logAction(action) {
+function updateButtonsState() {
+  const raw = valueInput.value.trim();
+  const isValidInteger = raw.length > 0 && Number.isInteger(Number(raw));
+  btnA.disabled = !isValidInteger;
+  btnB.disabled = !isValidInteger;
+}
+valueInput.addEventListener('input', updateButtonsState);
+
+// ============================================================
+// Buttons -- call the relay (which itself calls Storga)
+// ============================================================
+async function triggerAction(action) {
   const payload = {
-    code_qr: currentCode || "",
-    saisie: qtyInput.value || "",
+    qr_code: currentCode || "",
+    value: valueInput.value || "",
     action: action
   };
 
-  logEl.textContent = "Envoi vers le relais :\n" + JSON.stringify(payload, null, 2);
-  setStatus("Envoi en cours...", "");
+  logEl.textContent = "Sending to relay:\n" + JSON.stringify(payload, null, 2);
+  setStatus("Sending...", "");
   btnA.disabled = true;
   btnB.disabled = true;
 
@@ -280,32 +293,22 @@ async function logAction(action) {
     const data = await res.json().catch(() => ({}));
 
     if (res.ok && data.success) {
-      setStatus("Bouton \"" + action + "\" déclenché ✔ (Storga HTTP " + data.status + ")", "ok");
-      logEl.textContent += "\n\nSuccès — Storga HTTP " + data.status;
+      setStatus("Button \"" + action + "\" triggered \u2714 (Storga HTTP " + data.status + ")", "ok");
+      logEl.textContent += "\n\nSuccess -- Storga HTTP " + data.status;
     } else {
-      setStatus("Échec — " + (data.error || ("HTTP " + res.status)), "err");
-      logEl.textContent += "\n\nÉchec : " + JSON.stringify(data);
+      setStatus("Failed -- " + (data.error || ("HTTP " + res.status)), "err");
+      logEl.textContent += "\n\nFailed: " + JSON.stringify(data);
     }
   } catch (e) {
-    setStatus("Erreur réseau vers le relais : " + e.message, "err");
-    logEl.textContent += "\n\nErreur réseau : " + e.message;
+    setStatus("Network error to relay: " + e.message, "err");
+    logEl.textContent += "\n\nNetwork error: " + e.message;
   } finally {
     updateButtonsState();
   }
 }
 
-const btnA = document.getElementById('btnA');
-const btnB = document.getElementById('btnB');
-
-function updateButtonsState() {
-  const hasValue = qtyInput.value.trim().length > 0;
-  btnA.disabled = !hasValue;
-  btnB.disabled = !hasValue;
-}
-qtyInput.addEventListener('input', updateButtonsState);
-
-btnA.addEventListener('click', () => logAction('STOP'));
-btnB.addEventListener('click', () => logAction('PARTIAL'));
+btnA.addEventListener('click', () => triggerAction('STOP'));
+btnB.addEventListener('click', () => triggerAction('PARTIAL'));
 
 function setStatus(msg, cls) {
   statusEl.textContent = msg;
