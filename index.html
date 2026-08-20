@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sirivan QR Scan</title>
+<title>QR Scan</title>
 <style>
   :root {
     --bg: #f5f6f8;
@@ -33,6 +33,9 @@
     font-weight: 700;
     background: var(--card);
     border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
   main {
     flex: 1;
@@ -48,7 +51,7 @@
     padding: 14px;
   }
   .step-title {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -62,14 +65,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     background: var(--accent);
     color: white;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
+    flex-shrink: 0;
   }
+  .icon { flex-shrink: 0; }
 
   /* Step 1: camera */
   #camWrap {
@@ -100,25 +105,36 @@
     word-break: break-all;
     min-height: 20px;
     color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   #qrValue.filled { color: var(--text); font-weight: 600; }
+  #qrValueText { flex: 1; }
   #rescanBtn {
     margin-top: 10px;
     width: 100%;
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
-    padding: 10px;
+    padding: 12px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 600;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
   }
 
   /* Step 2: input */
   input[type="number"] {
     width: 100%;
-    padding: 14px;
-    font-size: 18px;
+    padding: 16px;
+    font-size: 24px;
+    font-weight: 700;
+    text-align: center;
     border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--bg);
@@ -129,13 +145,17 @@
   .btnRow { display: flex; gap: 10px; }
   button.action {
     flex: 1;
-    padding: 16px;
-    font-size: 16px;
+    padding: 20px 8px;
+    font-size: 17px;
     font-weight: 700;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
     color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
   }
   #btnDone { background: var(--done); }
   #btnDone:active { background: var(--done-dark); }
@@ -148,10 +168,14 @@
   }
 
   #status {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
-    min-height: 20px;
+    min-height: 22px;
     text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
   }
   #status.ok { color: var(--done); }
   #status.err { color: var(--error); }
@@ -178,31 +202,57 @@
 </head>
 <body>
 
-<header>Workshop QR Scan</header>
+<header>
+  <svg class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="14" y1="14" x2="21" y2="14"></line><line x1="14" y1="21" x2="21" y2="21"></line><line x1="17.5" y1="14" x2="17.5" y2="21"></line></svg>
+  Workshop QR Scan
+</header>
 
 <main>
 
   <div class="step">
-    <div class="step-title"><span class="step-number">1</span> Scan the ticket QR code</div>
+    <div class="step-title">
+      <span class="step-number">1</span>
+      <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+      Scan QR code
+    </div>
     <div id="camWrap">
       <video id="video" playsinline muted autoplay></video>
       <div id="scanBox"></div>
     </div>
+    <div id="qrValue">
+      <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      <span id="qrValueText">No code scanned yet</span>
+    </div>
     <canvas id="canvas" style="display:none;"></canvas>
-    <div id="qrValue">No code scanned yet</div>
-    <button id="rescanBtn">Rescan</button>
+    <button id="rescanBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+      Rescan
+    </button>
   </div>
 
   <div class="step">
-    <div class="step-title"><span class="step-number">2</span> Enter the quantity</div>
+    <div class="step-title">
+      <span class="step-number">2</span>
+      <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="6" y1="9" x2="6" y2="9"></line><line x1="10" y1="9" x2="10" y2="9"></line><line x1="14" y1="9" x2="14" y2="9"></line><line x1="18" y1="9" x2="18" y2="9"></line><line x1="6" y1="13" x2="18" y2="13"></line></svg>
+      Enter quantity
+    </div>
     <input type="number" id="valueInput" inputmode="numeric" pattern="[0-9]*" step="1" min="0" placeholder="0">
   </div>
 
   <div class="step">
-    <div class="step-title"><span class="step-number">3</span> Choose an action</div>
+    <div class="step-title">
+      <span class="step-number">3</span>
+      Confirm
+    </div>
     <div class="btnRow">
-      <button class="action" id="btnDone" disabled>DONE</button>
-      <button class="action" id="btnPartial" disabled>PARTIAL</button>
+      <button class="action" id="btnDone" disabled>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        DONE
+      </button>
+      <button class="action" id="btnPartial" disabled>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2 A10 10 0 0 1 12 22 Z" fill="white" stroke="none"></path></svg>
+        PARTIAL
+      </button>
     </div>
   </div>
 
@@ -230,6 +280,7 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const qrValueEl = document.getElementById('qrValue');
+const qrValueTextEl = document.getElementById('qrValueText');
 const statusEl = document.getElementById('status');
 const valueInput = document.getElementById('valueInput');
 const rescanBtn = document.getElementById('rescanBtn');
@@ -255,7 +306,7 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
     scanning = true;
-    setStatus("Camera active -- point at the QR code", "");
+    setStatus("Camera active", "");
 
     if (useBarcodeDetector) {
       detector = new BarcodeDetector({ formats: ['qr_code'] });
@@ -318,18 +369,18 @@ function scanLoopFallback() {
 
 function onCodeDetected(value) {
   currentCode = value;
-  qrValueEl.textContent = value;
+  qrValueTextEl.textContent = value;
   qrValueEl.classList.add('filled');
   scanning = false;
-  setStatus("Code read \u2714", "ok");
+  setStatus("Code read", "ok");
   if (navigator.vibrate) navigator.vibrate(80);
 }
 
 rescanBtn.addEventListener('click', () => {
   currentCode = null;
-  qrValueEl.textContent = "No code scanned yet";
+  qrValueTextEl.textContent = "No code scanned yet";
   qrValueEl.classList.remove('filled');
-  setStatus("Camera active -- point at the QR code", "");
+  setStatus("Camera active", "");
   scanning = true;
   if (useBarcodeDetector) scanLoopNative();
   else scanLoopFallback();
@@ -370,14 +421,14 @@ async function triggerAction(action) {
     const data = await res.json().catch(() => ({}));
 
     if (res.ok && data.success) {
-      setStatus("\"" + action + "\" recorded \u2714", "ok");
+      setStatus(action + " recorded", "ok");
       logEl.textContent += "\n\nSuccess -- Storga HTTP " + data.status;
     } else {
       setStatus("Failed -- " + (data.error || ("HTTP " + res.status)), "err");
       logEl.textContent += "\n\nFailed: " + JSON.stringify(data);
     }
   } catch (e) {
-    setStatus("Network error to relay: " + e.message, "err");
+    setStatus("Network error: " + e.message, "err");
     logEl.textContent += "\n\nNetwork error: " + e.message;
   } finally {
     updateButtonsState();
